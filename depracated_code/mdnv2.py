@@ -1,18 +1,3 @@
-"""
-Ideas
------
-
-1. re-write output layer cleanly for just one dimension.
-Then if data is more than one-dimension, treat each dimension independently
-as a one-dimensional mixture. The neural network should be able to work
-out the relationship between the dimensions.
-
-2. Instead of input as one layer have input as three seperate layers. One for
-the weights, one for the means and one for the variances. We would then just
-need to re-write the loss function. This would make it a lot simpler to read 
-and alter.
-"""
-
 from keras import backend as K
 from keras.engine.topology import Layer
 import numpy as np
@@ -23,6 +8,8 @@ def get_and_transform_mixture_coef(output, num_components=24, output_dim=1):
     Only called by mdn_loss. Gets output (layer of NN) and softmax
     transforms the mixture weights and re-scales variance weights such that they
     are positive.
+
+    output shape is feature_dim x output_dim
 
     Parameters
     ----------
@@ -44,20 +31,24 @@ def get_and_transform_mixture_coef(output, num_components=24, output_dim=1):
         mean of mixtures.
 
     """
-    out_pi = output[:,:num_components]
-    out_sigma = output[:,num_components:2*num_components]
-    out_mu = output[:,2*num_components:]
+    out_pi = output[0,:]
+    out_sigma = output[1,:]
+    out_mu = output[2,:]
     out_mu = K.reshape(out_mu, [-1, num_components, output_dim])
     out_mu = K.permute_dimensions(out_mu,[1,0,2])
     # use softmax to normalize pi into prob distribution
-    max_pi = K.max(out_pi, axis=1, keepdims=True)
+
+    max_pi = K.max(out_pi, keepdims=True)
     out_pi = out_pi - max_pi
     out_pi = K.exp(out_pi)
-    normalize_pi = 1 / K.sum(out_pi, axis=1, keepdims=True)
+    normalize_pi = 1 / K.sum(out_pi, keepdims=True)
     out_pi = normalize_pi * out_pi
     # use exponential to make sure sigma is positive
     out_sigma = K.exp(out_sigma)
+    out_sigma = K.reshape(out_sigma, [-1, num_components, output_dim])
+    out_sigma = K.permute_dimensions(out_sigma,[1,0,2])
     return out_pi, out_sigma, out_mu
+
 
 def tf_normal(y, mu, sigma):
     '''
@@ -156,6 +147,7 @@ def mdn_loss(num_components=24, output_dim=1):
         return get_lossfunc(out_pi, out_sigma, out_mu, y)
     return loss
 
+
 class MixtureDensity(Layer):
     """
     Keras output layer for a mixture density network.
@@ -242,23 +234,41 @@ class MixtureDensity(Layer):
         shared (which is a limitation) and weights are shared (necessarily).
 
         This would need extending or correcting.
-        """
-        self.output_dim = self.num_components * (2+self.kernel_dim)
-        self.Wh = K.variable(np.random.normal(scale=0.5,size=(self.input_dim, self.hidden_dim)))
-        self.bh = K.variable(np.random.normal(scale=0.5,size=(self.hidden_dim)))
-        self.Wo = K.variable(np.random.normal(scale=0.5,size=(self.hidden_dim, self.output_dim)))
-        self.bo = K.variable(np.random.normal(scale=0.5,size=(self.output_dim)))
 
-        self.trainable_weights = [self.Wh,self.bh,self.Wo,self.bo]
+        NB. In process of extending this.
+        """
+        self.output_dim = self.num_components
+        self.feature_dim = self.kernel_dim
+
+        self.Wm = K.random_normal_variable(shape=(self.input_dim, self.output_dim),mean=0,scale=1) # Gaussian distribution
+        self.bm = K.random_normal_variable(shape=(1,self.output_dim),mean=0,scale=1)
+
+        self.Wv = K.random_normal_variable(shape=(self.input_dim, self.output_dim),mean=0,scale=1) # Gaussian distribution
+        self.bv = K.random_normal_variable(shape=(1,self.output_dim),mean=0,scale=1)
+
+        self.Wp = K.random_normal_variable(shape=(self.input_dim, self.output_dim),mean=0,scale=1) # Gaussian distribution
+        self.bp = K.random_normal_variable(shape=(1,self.output_dim),mean=0,scale=1)
+
+        self.trainable_weights = [self.Wm,self.bm,self.Wv,self.bv,self.Wp,self.bp]
+
+        print(self.Wm.get_shape())
+        print(self.bm.get_shape())
 
     def call(self, x, mask=None):
         """
         Call layer. Takes weights passing them through tanh sctivation and
         returns output.
         """
-        hidden = K.tanh(K.dot(x, self.Wh) + self.bh)
-        output = K.dot(hidden,self.Wo) + self.bo
+
+        print(x.get_shape())
+        print(self.Wm.get_shape())
+        print(self.bm.get_shape())
+        mean_output = K.dot(x,self.Wm) + self.bm
+        variance_output = K.dot(x,self.Wv) + self.bv
+        proportion_output = K.dot(x,self.Wp) + self.bp
+        output = K.concatenate([mean_output, variance_output,proportion_output], axis=-1)
+        print(output.get_shape())
         return output
 
     def get_output_shape_for(self, input_shape):
-        return (input_shape[0], self.output_dim)
+        return (input_shape[0], self.feature_dim,self.output_dim)
