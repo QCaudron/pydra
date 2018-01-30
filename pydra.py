@@ -39,7 +39,7 @@ from keras.models import Model
 from keras import backend as K
 from keras.engine.topology import Layer
 
-def generate_mdn_sample_from_ouput(output, test_size, num_components=24):
+def generate_mdn_sample_from_ouput(output, test_size):
     """
     Using the output layer from the prediction on a fitted mdn model
     generate test_size number of samples.
@@ -51,8 +51,7 @@ def generate_mdn_sample_from_ouput(output, test_size, num_components=24):
             (unscaled) and means
         test_size : int
             number of samples to draw from fitted mdn.
-        num_components : int
-            number of mixtures
+
 
 
     Returns
@@ -65,6 +64,8 @@ def generate_mdn_sample_from_ouput(output, test_size, num_components=24):
         mean of mixtures.
 
     """
+    num_components = int(output.shape[1]/3)
+
     out_mu = output[:,:num_components]
     out_sigma = output[:,num_components:2*num_components]
     out_pi = output[:,2*num_components:]
