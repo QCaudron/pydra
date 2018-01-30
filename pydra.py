@@ -68,7 +68,7 @@ def generate_mdn_sample_from_ouput(output, test_size, num_components=24):
     out_mu = output[:,:num_components]
     out_sigma = output[:,num_components:2*num_components]
     out_pi = output[:,2*num_components:]
-    
+
     result = np.zeros(test_size)
     rn = np.random.randn(test_size)
     mu = 0
@@ -272,7 +272,7 @@ def proportion_transformation(p):
 
 
 def load_mdn_model(cluster_size=10,output_size=1,layers = 3,input_size=1,
-                   dense_layer_size=64):
+                   dense_layer_size=64,print_summary=True):
     """
     Create a keras mixture density model.
 
@@ -284,8 +284,24 @@ def load_mdn_model(cluster_size=10,output_size=1,layers = 3,input_size=1,
 
     Parameters
     ----------
-    v : keras layer
-        input layer.
+    cluster_size : int
+        Number of mixture clusters for each output
+
+    output_size : int
+        Number of outputs of model
+
+    layers : int
+        Number of densely connected layers
+
+    input_size : int
+        Dimension of input size
+
+    dense_layer_size : int
+        Number of neurons in the densely connected layers
+
+    print_summary : bool
+        Choose whether to print summary of constructed MDN
+        (useful for debugging).
 
 
     Returns
@@ -294,7 +310,7 @@ def load_mdn_model(cluster_size=10,output_size=1,layers = 3,input_size=1,
 
     """
 
-    def mdn_merged_layer(x):
+    def mdn_merged_layer(x,name=None):
         """
         Create merged mdn layer from densely connected layer.
         """
@@ -303,7 +319,7 @@ def load_mdn_model(cluster_size=10,output_size=1,layers = 3,input_size=1,
         v = Lambda(variance_transformation)(v)
         p = Dense(cluster_size)(x)
         p = Lambda(proportion_transformation)(p)
-        return concatenate([m,v,p], axis=-1)
+        return concatenate([m,v,p], axis=-1, name=name)
 
 
     inputs = Input(shape=(input_size,))
@@ -314,7 +330,7 @@ def load_mdn_model(cluster_size=10,output_size=1,layers = 3,input_size=1,
         x = Dense(dense_layer_size, activation='relu')(x)
 
     # create multiple mdn merge layers to generate output of model.
-    outputs = [mdn_merged_layer(x) for _ in range(output_size)]
+    outputs = [mdn_merged_layer(x,name='output_{}'.format(i)) for i in range(output_size)]
 
     # Instantiate Keras model.
     model = Model(inputs=[inputs], outputs=outputs)
