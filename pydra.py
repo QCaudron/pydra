@@ -56,12 +56,8 @@ def generate_mdn_sample_from_ouput(output, test_size):
 
     Returns
     ----------
-    out_pi : array
-        weights of mixtures.
-    out_sigma : array
-        variance of mixtures.
-    out_mu : array
-        mean of mixtures.
+    result : array
+        sample from mixture distribution.
 
     """
     num_components = int(output.shape[1]/3)
@@ -83,6 +79,37 @@ def generate_mdn_sample_from_ouput(output, test_size):
         std = np.sqrt(out_sigma[i,idx])
         result[i] = mu + rn[i]*std
     return result
+
+def get_stats(output):
+    """
+    Gets mean and percentile values from output of MDN.
+
+    Parameters
+    ----------
+        output : array
+            final layer of MDN network
+
+
+    Returns
+    ----------
+        mixure_mu : array
+            means of output
+
+        mixture_sigma : array
+            std of output
+    """
+    num_components = int(output.shape[1]/3)
+    pi,sigma,mu = get_mixture_coef(output, num_components=num_components)
+    mu = mu.swapaxes(1,0)
+    sigma = sigma.swapaxes(1,0)
+    pi = pi.swapaxes(1,0)
+
+    mixture_mu = np.sum(pi*mu,axis=0)
+    mu_d = np.power((mu - mixture_mu),2.)
+    mixture_sigma = np.sqrt(np.sum(pi*(mu_d + sigma**2),axis=0))
+
+    return mixture_mu,mixture_sigma
+
 
 
 def get_mixture_coef(output, num_components=24):
