@@ -170,6 +170,28 @@ def tf_normal(y, mu, sigma):
 
     return result
 
+def tf_gamma(y,alpha,beta):
+    '''
+    pdf of gamma density for _n_ data points and _m_ mixtures.
+
+    Parameters
+    ----------
+    y : array (n,)
+        data
+    alpha : array (,m)
+        gamma shape parameter
+    beta : array (,m)
+        gamma shape parameter
+    Returns
+    -------
+
+    pdf : array (n,m)
+        probability for each data point and mixture
+    '''
+    Z = K.Gamma(alpha) * beta**alpha
+    return y**(alpha - 1) * K.exp(-x * beta) / Z
+
+
 def get_lossfunc(out_pi, out_sigma, out_mu, y):
     """
     For vector of mixtures with weights out_pi, variance out_sigma and
@@ -362,7 +384,7 @@ def load_mdn_model(cluster_size=10,output_size=1,layers = 3,input_size=1,
 
     # Instantiate Keras model.
     model = Model(inputs=[inputs], outputs=outputs)
-    print(model.summary())
+    if print_summary: print(model.summary())
 
     opt = Adam(lr=0.001)
     model.compile(loss=mdn_loss(num_components=cluster_size),optimizer=opt)
