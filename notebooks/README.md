@@ -14,4 +14,7 @@ and formation of different mixtures. This shows off the power of the functional
 api for keras.
 * [Example 3](two_inputs_to_one_output_example.ipynb): Here we consider more than
 one model input to simulate multiple epidemiological parameters giving rise to
-a final size distribution. 
+a final size distribution.
+* [Example 4](Negative_binomial_test.ipynb): This notebook considers fitting
+to a negative binomial distribution. This is currently not working as code needs
+to be adapted to include a Gamma mixture as an output. 
