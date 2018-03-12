@@ -13,6 +13,11 @@ from the model distribution and generating statistics
 import numpy as np
 import math
 from keras import backend as K
+import tensorflow as tf
+import tensorflow.contrib.distributions as dist
+
+def gamma(x):
+    return K.exp(tf.lgamma(x))
 
 def tf_normal(y, mu, sigma):
     '''
@@ -61,5 +66,15 @@ def tf_gamma(y,alpha,beta):
     pdf : array (n,m)
         probability for each data point and mixture
     '''
-    Z = K.gamma(alpha) * beta**alpha
-    return y**(alpha - 1) * K.exp(-x * beta) / Z
+    #Z = gamma(alpha) * K.pow(beta,alpha)
+    #return K.pow(y,(alpha - 1)) * K.exp(-y * beta) / Z
+    return dist.Gamma(alpha=alpha, beta=beta).pdf(y)
+
+def tf_beta(y,alpha,beta):
+    '''
+    pdf of beta distribution for _n_ data points and _m_ mixtures
+
+    '''
+    #Z = gamma(alpha) * gamma(beta) / gamma(alpha + beta)
+    #return y**(alpha - 1) * (1 - y)**(beta - 1) / Z
+    return dist.Beta(a=alpha, b=beta).pdf(y)

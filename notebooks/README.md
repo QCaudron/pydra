@@ -16,5 +16,7 @@ api for keras.
 one model input to simulate multiple epidemiological parameters giving rise to
 a final size distribution.
 * [Example 4](Negative_binomial_test.ipynb): This notebook considers fitting
-to a negative binomial distribution. This is currently not working as code needs
-to be adapted to include a Gamma mixture as an output. 
+to a negative binomial distribution.
+* [Example 5](Fitting_Gamma_and_Beta_distributions.ipynb): This notebook
+demonstrates how to fit when an output is either defined between zero and one or
+defined to be greater than zero. This uses either a gamma or beta mixture model.
