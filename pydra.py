@@ -58,7 +58,7 @@ class Pydra:
     @staticmethod
     def load_mdn_model(cluster_size=10,output_size=1,layers = 3,input_size=1,
                        dense_layer_size=64,print_summary=True,
-                       output_distributions=None):
+                       output_distributions=None,learning_rate=0.001):
         """
         Create a keras mixture density model.
 
@@ -152,7 +152,7 @@ class Pydra:
         model = Model(inputs=[inputs], outputs=outputs)
         if print_summary: print(model.summary())
 
-        opt = Adam(lr=0.001)
+        opt = Adam(lr=learning_rate)
 
 
         loss_list = [mdn_loss(num_components=cluster_size,pdf=pdfs[dist]) \
@@ -168,7 +168,7 @@ class Pydra:
 
     def __init__(self,cluster_size=10,output_size=1,layers = 3,input_size=1,
                  dense_layer_size=64,print_summary=True,
-                 output_distributions='Normal'):
+                 output_distributions='Normal',learning_rate=0.001):
         """
         Initialize Pydra class.
 
@@ -201,7 +201,7 @@ class Pydra:
         self.model = Pydra.load_mdn_model(cluster_size=cluster_size,
         output_size=output_size,layers = layers,input_size=input_size,
         dense_layer_size=dense_layer_size,print_summary=print_summary,
-        output_distributions=output_distributions)
+        output_distributions=output_distributions,learning_rate=learning_rate)
 
         self.predicted_output = None
 
