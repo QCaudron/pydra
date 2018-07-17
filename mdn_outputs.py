@@ -78,6 +78,9 @@ def generate_mdn_sample_from_ouput(output, test_size,distribution = 'Normal'):
             alpha = out_mu[i,idx]
             beta = out_sigma[i,idx]
             result[i] = np.random.beta(alpha,beta)
+        elif(distribution is 'Poisson'):
+            rate = out_mu[i,idx]
+            result[i] = np.random.poisson(rate)
         else:
             raise NameError('{} not a distribution'.format(distribution))
     return result
@@ -122,6 +125,10 @@ def get_stats(output,distribution = 'Normal'):
         mixture_mu = np.sum(pi*alpha/(alpha+beta),axis=0)
         v = alpha*beta/(np.power(alpha+beta,2)*(alpha+beta+1))
         mixture_sigma = np.sqrt(np.sum(pi*v,axis=0))
+    elif(distribution is 'Poisson'):
+        mixture_mu = np.sum(pi*mu,axis=0)
+        mixture_var = np.sum(pi*(mu**2 + mu),axis=0) - mixture_mu**2
+        mixture_sigma = np.sqrt(mixture_var)
     else:
         raise NameError('{} not a distribution'.format(distribution))
 

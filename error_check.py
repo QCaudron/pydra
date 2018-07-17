@@ -12,7 +12,7 @@ Contains all methods associated with error checking.
 """
 import numpy as np
 import warnings
-distribution_list = ['Normal','Beta','Gamma']
+distribution_list = ['Normal','Beta','Gamma','Poisson']
 
 def check_training_output_values(outputs,distributions):
     """
@@ -38,7 +38,8 @@ def check_training_output_values(outputs,distributions):
         if np.any((output>1) | (output<0)) and distribution in ['Beta']:
             raise NameError('Can\'t have output less than zero or greater than one for output with Beta distribution.')
 
-
+        if np.any((output<0)) and distribution in ['Poisson']:
+            raise NameError('Can\'t have output less than zero with Poisson distribution.')
 
         if np.any(output>1-eps) and distribution in ['Beta']:
             raise UserWarning('{}% of values for output {} between {} and {}. As using the Beta distribution for this output, this may lead to nans in training.'.\
@@ -67,7 +68,8 @@ def check_distribution(distribution):
 
 def check_output_distributions(output_distributions):
     """
-    Check if output distribution list contains only Gamma, Normal or Beta.
+    Check if output distribution list contains only Gamma, Normal, Poisson
+    or Beta.
     """
 
     err = 'Output needs to be of type: {}'.format(distribution_list)

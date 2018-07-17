@@ -39,7 +39,7 @@ from keras.models import Model
 from keras import backend as K
 from keras.engine.topology import Layer
 from mdn_outputs import generate_mdn_sample_from_ouput,get_stats
-from distributions import tf_normal,tf_gamma,tf_beta
+from distributions import tf_normal,tf_gamma,tf_beta,tf_poisson
 from transformations import variance_transformation,proportion_transformation
 from get_coefficients import get_mixture_coef
 import error_check as ec
@@ -57,8 +57,9 @@ class Pydra:
     """
     @staticmethod
     def load_mdn_model(cluster_size=10,output_size=1,layers = 3,input_size=1,
-                       dense_layer_size=64,print_summary=True,
-                       output_distributions=None,learning_rate=0.001):
+                       dense_layer_size=64,output_distributions=None,
+                       learning_rate=0.001,activation='relu',
+                       print_summary=True):
         """
         Create a keras mixture density model.
 
@@ -84,6 +85,12 @@ class Pydra:
 
         dense_layer_size : int
             Number of neurons in the densely connected layers
+
+        learning_rate: float
+            The learning rate for training (uses Adam).
+
+        activation: str
+            Activation function for dense layer. Default is RELU.
 
         print_summary : bool
             Choose whether to print summary of constructed MDN
@@ -130,19 +137,36 @@ class Pydra:
 
             return concatenate([alpha,beta,p], axis=-1, name=name)
 
+        def poisson_merged_layer(x,name=None):
+            """
+            Create merged mdn layer for a gamma distribution
+            from densely connected layer.
+            """
+            rate = Dense(cluster_size)(x)
+            rate = Lambda(variance_transformation)(rate)
+
+            ratep = Dense(cluster_size)(x)
+            ratep = Lambda(variance_transformation)(ratep)
+
+            p = Dense(cluster_size)(x)
+            p = Lambda(proportion_transformation)(p)
+
+            return concatenate([rate,ratep,p], axis=-1, name=name)
+
         # create dictionary for type of output layer depending on distribution
         #beta can re-use gamma_merged_layer
         mlayers = {'Gamma':gamma_merged_layer,'Normal':normal_merged_layer,
-                   'Beta':gamma_merged_layer}
-        pdfs = {'Gamma':tf_gamma,'Normal':tf_normal,'Beta':tf_beta}
+                   'Beta':gamma_merged_layer,'Poisson':poisson_merged_layer}
+        pdfs = {'Gamma':tf_gamma,'Normal':tf_normal,'Beta':tf_beta,
+                'Poisson':tf_poisson}
 
         # define input layer
         inputs = Input(shape=(input_size,))
 
         # Stack densely-connected layers on top of input.
-        x = Dense(dense_layer_size, activation='relu')(inputs)
+        x = Dense(dense_layer_size, activation=activation)(inputs)
         for _ in range(1,layers):
-            x = Dense(dense_layer_size, activation='relu')(x)
+            x = Dense(dense_layer_size, activation=activation)(x)
 
         # create multiple mdn merge layers to generate output of model.
         outputs = [mlayers[dist](x,name='output_{}'.format(i)) \
@@ -168,7 +192,8 @@ class Pydra:
 
     def __init__(self,cluster_size=10,output_size=1,layers = 3,input_size=1,
                  dense_layer_size=64,print_summary=True,
-                 output_distributions='Normal',learning_rate=0.001):
+                 output_distributions='Normal',learning_rate=0.001,
+                 activation='relu'):
         """
         Initialize Pydra class.
 
@@ -188,6 +213,10 @@ class Pydra:
                 print out summary of network
             output_distributions: list
                 list of distribution for outputs. Default is 'Normal'.
+            learning_rate: float
+                The learning rate for training (uses Adam).
+            activation: str
+                Activation function for dense layer. Default is RELU.
         """
         if isinstance(output_distributions, str):
             # if output just a string then turn into array of lenth output_size
@@ -201,7 +230,8 @@ class Pydra:
         self.model = Pydra.load_mdn_model(cluster_size=cluster_size,
         output_size=output_size,layers = layers,input_size=input_size,
         dense_layer_size=dense_layer_size,print_summary=print_summary,
-        output_distributions=output_distributions,learning_rate=learning_rate)
+        output_distributions=output_distributions,learning_rate=learning_rate,
+        activation=activation)
 
         self.predicted_output = None
 
@@ -322,7 +352,7 @@ def get_lossfunc(out_pi, out_sigma, out_mu, y, pdf=tf_normal):
     """
     For vector of mixtures with weights out_pi, variance out_sigma and
     mean out_mu (all of shape (,m)) and data y (of shape (n,)) output loss
-    function which is the Gaussian mixture negative log-likelihood
+    function which is the mixture density negative log-likelihood
 
     Parameters
     ----------

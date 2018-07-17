@@ -68,13 +68,55 @@ def tf_gamma(y,alpha,beta):
     '''
     #Z = gamma(alpha) * K.pow(beta,alpha)
     #return K.pow(y,(alpha - 1)) * K.exp(-y * beta) / Z
-    return dist.Gamma(alpha=alpha, beta=beta).pdf(y)
+    return dist.Gamma(concentration=alpha, rate=beta).prob(y)
 
 def tf_beta(y,alpha,beta):
     '''
     pdf of beta distribution for _n_ data points and _m_ mixtures
 
+    Parameters
+    ----------
+    y : array (n,)
+        data
+    alpha : array (,m)
+        beta shape parameter
+    beta : array (,m)
+        beta shape parameter
+    Returns
+    -------
+
+    pdf : array (n,m)
+        probability for each data point and mixture
+
     '''
     #Z = gamma(alpha) * gamma(beta) / gamma(alpha + beta)
     #return y**(alpha - 1) * (1 - y)**(beta - 1) / Z
-    return dist.Beta(a=alpha, b=beta).pdf(y)
+    return dist.Beta(alpha,beta).prob(y)
+
+def tf_poisson(y,lbda,_):
+    '''
+    pmf of poisson density for _n_ data points and _m_ mixtures.
+
+    Parameters
+    ----------
+
+    y : array (n,)
+        data
+    lbda : array (,m)
+        Poisson rate parameter
+
+    Returns
+    -------
+
+    pdf : array (n,m)
+        probability for each data point and mixture
+
+    Notes
+    -----
+
+    As other distributions take in three parameters we include a redundant third
+    parameter. This would need refactoring.
+    '''
+    #Z = gamma(alpha) * gamma(beta) / gamma(alpha + beta)
+    #return y**(alpha - 1) * (1 - y)**(beta - 1) / Z
+    return dist.Poisson(lbda).prob(y)
