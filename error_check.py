@@ -12,9 +12,9 @@ Contains all methods associated with error checking.
 """
 import numpy as np
 import warnings
-distribution_list = ['Normal','Beta','Gamma','Poisson']
+distribution_list = ['Normal','Beta','Gamma','Poisson','Binomial']
 
-def check_training_output_values(outputs,distributions):
+def check_training_output_values(outputs,distributions,params):
     """
     Checks output values (y) match up with number of defined distributions
     and values are not too small if using beta or gamma mixture models (
@@ -38,13 +38,15 @@ def check_training_output_values(outputs,distributions):
         if np.any((output>1) | (output<0)) and distribution in ['Beta']:
             raise NameError('Can\'t have output less than zero or greater than one for output with Beta distribution.')
 
-        if np.any((output<0)) and distribution in ['Poisson']:
-            raise NameError('Can\'t have output less than zero with Poisson distribution.')
+        if np.any((output<0)) and distribution in ['Poisson','Binomial']:
+            raise NameError('Can\'t have output less than zero with {} distribution.'.format(distribution))
 
         if np.any(output>1-eps) and distribution in ['Beta']:
             raise UserWarning('{}% of values for output {} between {} and {}. As using the Beta distribution for this output, this may lead to nans in training.'.\
                           format(np.mean(output>1-eps),i,1.-eps,1.)
                           )
+        if np.any(output > params['binomial_n']) and distribution in ['Binomial']:
+            raise NameError('Can\'t have output greater than binomial_n with {} distribution.'.format(distribution))
 
 
     if isinstance(outputs, list):
@@ -68,8 +70,7 @@ def check_distribution(distribution):
 
 def check_output_distributions(output_distributions):
     """
-    Check if output distribution list contains only Gamma, Normal, Poisson
-    or Beta.
+    Check if output distribution list contains only those in distribution_list
     """
 
     err = 'Output needs to be of type: {}'.format(distribution_list)
@@ -83,3 +84,17 @@ def check_output_distributions_equals_output_size(output_size,output_distributio
     """
     if output_size != len(output_distributions):
         raise NameError('output size needs to be same as length of output_distributions')
+
+def check_binomial_n_defined_if_binomial(params,distributions):
+    """
+    Check that binomial_n is defined in params if using binomial
+    """
+    if 'Binomial' in distributions:
+        if isinstance(params, dict):
+            if 'binomial_n' not in params:
+                raise NameError('binomial_n needs to be defined in params')
+            elif not isinstance(params['binomial_n'], float):
+                raise NameError('binomial_n must be float')
+
+        else:
+            raise NameError('params needs to be defined as a dictionary')

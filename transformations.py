@@ -67,3 +67,26 @@ def proportion_transformation(p):
     normalize_p = 1 / K.sum(out_p, axis=1, keepdims=True)
     out_p = normalize_p * out_p
     return out_p
+
+def round_transformation(r):
+    """
+    Transform a layer such that it represents values rounded to between [0,1]
+
+    Example
+    -------
+
+    r = Lambda(round_transformation)(r)
+
+    Parameters
+    ----------
+    r : keras layer
+        input layer.
+
+
+    Returns
+    -------
+        keras layer
+
+    """
+    out_r = .5 + .5*K.tanh(r)
+    return out_r

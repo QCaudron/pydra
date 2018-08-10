@@ -31,16 +31,16 @@ import numpy as np
 import math
 from keras.models import Sequential
 from keras.layers import Dense, Activation
-from keras.optimizers import Adam
+from keras.optimizers import Adam,RMSprop,SGD
 from keras import objectives
 import numpy as np
-from keras.layers import Input, Dense, Lambda, concatenate
+from keras.layers import Input, Dense, Lambda, concatenate, BatchNormalization
 from keras.models import Model
 from keras import backend as K
 from keras.engine.topology import Layer
 from mdn_outputs import generate_mdn_sample_from_ouput,get_stats
-from distributions import tf_normal,tf_gamma,tf_beta,tf_poisson
-from transformations import variance_transformation,proportion_transformation
+from distributions import tf_normal,tf_gamma,tf_beta,tf_poisson,tf_binomial,gen_tf_binomial
+from transformations import variance_transformation,proportion_transformation,round_transformation
 from get_coefficients import get_mixture_coef
 import error_check as ec
 import plot_utils
@@ -58,6 +58,7 @@ class Pydra:
     @staticmethod
     def load_mdn_model(cluster_size=10,output_size=1,layers = 3,input_size=1,
                        dense_layer_size=64,output_distributions=None,
+                       params= {'binomial_n':1000.},
                        learning_rate=0.001,activation='relu',
                        print_summary=True):
         """
@@ -153,12 +154,30 @@ class Pydra:
 
             return concatenate([rate,ratep,p], axis=-1, name=name)
 
+        def binomial_merged_layer(x,name=None):
+            """
+            Create merged mdn layer for a binomial distribution
+            from densely connected layer.
+            """
+            # we use a round transformation here as ps are independent.
+            p = Dense(cluster_size)(x)
+            p = Lambda(round_transformation)(p)
+
+            p_ = Dense(cluster_size)(x)
+            p_ = Lambda(round_transformation)(p_)
+
+            pi = Dense(cluster_size)(x)
+            pi = Lambda(proportion_transformation)(pi)
+
+            return concatenate([p,p_,pi], axis=-1, name=name)
+
         # create dictionary for type of output layer depending on distribution
         #beta can re-use gamma_merged_layer
         mlayers = {'Gamma':gamma_merged_layer,'Normal':normal_merged_layer,
-                   'Beta':gamma_merged_layer,'Poisson':poisson_merged_layer}
+                   'Beta':gamma_merged_layer,'Poisson':poisson_merged_layer,
+                   'Binomial':binomial_merged_layer}
         pdfs = {'Gamma':tf_gamma,'Normal':tf_normal,'Beta':tf_beta,
-                'Poisson':tf_poisson}
+                'Poisson':tf_poisson,'Binomial':gen_tf_binomial(params['binomial_n'])}
 
         # define input layer
         inputs = Input(shape=(input_size,))
@@ -167,7 +186,6 @@ class Pydra:
         x = Dense(dense_layer_size, activation=activation)(inputs)
         for _ in range(1,layers):
             x = Dense(dense_layer_size, activation=activation)(x)
-
         # create multiple mdn merge layers to generate output of model.
         outputs = [mlayers[dist](x,name='output_{}'.format(i)) \
                   for i,dist in enumerate(output_distributions)]
@@ -193,6 +211,7 @@ class Pydra:
     def __init__(self,cluster_size=10,output_size=1,layers = 3,input_size=1,
                  dense_layer_size=64,print_summary=True,
                  output_distributions='Normal',learning_rate=0.001,
+                 params = {'binomial_n':1000.},
                  activation='relu'):
         """
         Initialize Pydra class.
@@ -215,6 +234,8 @@ class Pydra:
                 list of distribution for outputs. Default is 'Normal'.
             learning_rate: float
                 The learning rate for training (uses Adam).
+            params: dictionary
+                Dictionary of parameters used in output layer.
             activation: str
                 Activation function for dense layer. Default is RELU.
         """
@@ -225,13 +246,17 @@ class Pydra:
 
         ec.check_output_distributions_equals_output_size(output_size,output_distributions)
         ec.check_output_distributions(output_distributions)
+        # TODO error check params and binomial_n and convert binomial_n to float
+        ec.check_binomial_n_defined_if_binomial(params,output_distributions)
+
+        self.params = params
         self.outputs = output_distributions
 
         self.model = Pydra.load_mdn_model(cluster_size=cluster_size,
         output_size=output_size,layers = layers,input_size=input_size,
-        dense_layer_size=dense_layer_size,print_summary=print_summary,
-        output_distributions=output_distributions,learning_rate=learning_rate,
-        activation=activation)
+        params=params,dense_layer_size=dense_layer_size,
+        print_summary=print_summary,output_distributions=output_distributions,
+        learning_rate=learning_rate,activation=activation)
 
         self.predicted_output = None
 
@@ -242,7 +267,7 @@ class Pydra:
         so we get
         all these functions automatically.
         """
-        ec.check_training_output_values(args[1],self.outputs)
+        ec.check_training_output_values(args[1],self.outputs,self.params)
 
 
         return self.model.fit(*args,**kwargs)
@@ -281,12 +306,14 @@ class Pydra:
             for i,dist in zip(range(len(output)),distribution):
                 samples = generate_mdn_sample_from_ouput(output[i],
                                                          inputs.size,
-                                                         distribution=dist)
+                                                         distribution=dist,
+                                                         params=self.params)
                 prediction_samples.append(samples)
         else:
             prediction_samples = generate_mdn_sample_from_ouput(output,
                                                          inputs.size,
-                                                         distribution=self.outputs[0])
+                                                         distribution=self.outputs[0],
+                                                         params=self.params)
 
         return prediction_samples
 
@@ -337,7 +364,8 @@ class Pydra:
 
             if plot=='mean':
                 plot_utils.plot_mean_and_var(output,x_test,
-                                            distribution=self.outputs)
+                                            distribution=self.outputs,
+                                            params=self.params)
             elif plot=='sample':
                 raise NameError('Not yet implemented. Use plot=\'mean\' instead.')
             else:

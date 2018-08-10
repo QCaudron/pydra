@@ -1,12 +1,12 @@
 import pydra
 import matplotlib.pyplot as plt
 
-def plot_mean_and_var(output,x_test,distribution=None):
+def plot_mean_and_var(output,x_test,distribution=None,params=None):
     """
     Plot mean and variance for a given output.
     """
     def mplot(output,distribution,i=None):
-        mu,sigma = pydra.get_stats(output,distribution=distribution)
+        mu,sigma = pydra.get_stats(output,distribution=distribution,params=params)
         plt.figure(figsize=(8, 8))
         plt.title('Output {}'.format(i))
         plt.fill_between(x_test.flatten(), mu-sigma, mu+sigma,alpha=0.5)
@@ -20,7 +20,7 @@ def plot_mean_and_var(output,x_test,distribution=None):
     else:
         if distribution is None:
             distribution = ['Normal']
-                  
+
         mplot(output,distribution[0])
 
 

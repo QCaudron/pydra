@@ -25,7 +25,8 @@ from get_coefficients import get_mixture_coef
 import error_check as ec
 
 
-def generate_mdn_sample_from_ouput(output, test_size,distribution = 'Normal'):
+def generate_mdn_sample_from_ouput(output, test_size,distribution = 'Normal',
+                                   params = None):
     """
     Using the output layer from the prediction on a fitted mdn model
     generate test_size number of samples. (Note output corresponds to a
@@ -81,12 +82,16 @@ def generate_mdn_sample_from_ouput(output, test_size,distribution = 'Normal'):
         elif(distribution is 'Poisson'):
             rate = out_mu[i,idx]
             result[i] = np.random.poisson(rate)
+        elif(distribution is 'Binomial'):
+            p = out_mu[i,idx]
+            n = out_sigma[i,idx]
+            result[i] = np.random.binomial(params['binomial_n'],p)
         else:
             raise NameError('{} not a distribution'.format(distribution))
     return result
 
 # TODO Extend to other distributions: beta and gamma
-def get_stats(output,distribution = 'Normal'):
+def get_stats(output,distribution = 'Normal',params = None):
     """
     Gets mean and percentile values from output of MDN.
 
@@ -128,6 +133,15 @@ def get_stats(output,distribution = 'Normal'):
     elif(distribution is 'Poisson'):
         mixture_mu = np.sum(pi*mu,axis=0)
         mixture_var = np.sum(pi*(mu**2 + mu),axis=0) - mixture_mu**2
+        mixture_sigma = np.sqrt(mixture_var)
+    elif(distribution is 'Binomial'):
+        # TODO
+        # mu ==n, sigma == p
+        p = mu
+        n = params['binomial_n']
+        mixture_mu = np.sum(pi*n*p,axis=0)
+        v = n*p*(1-p)
+        mixture_var = np.sum(pi*(n*n*p*p+v),axis=0) - mixture_mu**2
         mixture_sigma = np.sqrt(mixture_var)
     else:
         raise NameError('{} not a distribution'.format(distribution))

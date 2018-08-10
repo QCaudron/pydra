@@ -120,3 +120,47 @@ def tf_poisson(y,lbda,_):
     #Z = gamma(alpha) * gamma(beta) / gamma(alpha + beta)
     #return y**(alpha - 1) * (1 - y)**(beta - 1) / Z
     return dist.Poisson(lbda).prob(y)
+
+def tf_binomial(y,n,p):
+    '''
+    pdf of binomial distribution for _n_ data points and _m_ mixtures
+
+    Parameters
+    ----------
+    y : array (n,)
+        data
+    n : array (,m)
+        n size parameter
+    p : array (,m)
+        p probability parameter
+    Returns
+    -------
+
+    pdf : array (n,m)
+        probability for each data point and mixture
+
+    '''
+    #Z = gamma(alpha) * gamma(beta) / gamma(alpha + beta)
+    #return y**(alpha - 1) * (1 - y)**(beta - 1) / Z
+    return dist.Binomial(n,p).prob(y)
+
+def gen_tf_binomial(n):
+    '''
+    generates function for
+    pdf of binomial distribution for _n_ data points and _m_ mixtures
+
+    Parameters
+    ----------
+    n : float32
+        n size parameter
+    Returns
+    -------
+
+    f : function
+        Similar form to tf_ functions
+
+    '''
+    # TODO Fix hack
+    def f(y,p,_):
+        return dist.Binomial(total_count=n,probs=p).prob(y)
+    return f
