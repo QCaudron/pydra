@@ -1,51 +1,16 @@
-"""
-Keras MDN module
-----------------
-
-Implementation of Mixture Density Networks in Keras.
-
-Summary
--------
-This is a complete redesign of the mdn module in order to streamline some of the
-code, make it more readable and more generalizable to multiple inputs and
-outputs.
-
-Routine Listings
-----------------
-    1. generate_mdn_sample_from_ouput: function
-    2. get_mixture_coef: function
-    3. tf_normal: function
-    4. get_lossfunc: function
-    5. mdn_loss: function
-    6. variance_transformation: function
-    7. proportion_transformation: function
-
-
-"""
-
-"""
-Load libraries
---------------
-"""
 import numpy as np
-import math
-from keras.models import Sequential
-from keras.layers import Dense, Activation
-from keras.optimizers import Adam,RMSprop,SGD
-from keras import objectives
-import numpy as np
-from keras.layers import Input, Dense, Lambda, concatenate, BatchNormalization
+from keras.layers import Input, Dense, Lambda, concatenate
+from keras.optimizers import Adam
 from keras.models import Model
 from keras import backend as K
-from keras.engine.topology import Layer
-from mdn_outputs import generate_mdn_sample_from_ouput,get_stats
-from distributions import tf_normal,tf_gamma,tf_beta,tf_poisson,tf_binomial,gen_tf_binomial
-from transformations import variance_transformation,proportion_transformation,round_transformation
-from get_coefficients import get_mixture_coef
-import error_check as ec
+from layers import mdn_layers
+from distributions import tf_normal, tf_gamma, tf_beta, tf_poisson, gen_tf_binomial
+from transformations import variance_transformation, proportion_transformation, round_transformation
+import error_check
 import plot_utils
 
-class Pydra:
+
+class Pydra(object):
     """
     Main class for constructing Mixture Density Network.
 
@@ -55,34 +20,37 @@ class Pydra:
     pydra = Pydra()
     pydra.model.fit(x,y,batch_size=200,epochs=epochs,verbose=1)
     """
+
     @staticmethod
-    def load_mdn_model(cluster_size=10,output_size=1,layers = 3,input_size=1,
-                       dense_layer_size=64,output_distributions=None,
-                       params= {'binomial_n':1000.},
-                       learning_rate=0.001,activation='relu',
-                       print_summary=True):
+    def instantiate_mdn_model(
+        input_size=1, output_size=1, cluster_size=10, layers=3, dense_layer_size=64,
+        output_distributions=None, params={"binomial_n": 1000.}, learning_rate=0.001,
+        activation="relu", print_summary=True
+    ):
+
         """
-        Create a keras mixture density model.
+        Create a mixture density model in Keras.
 
         Example
         -------
 
-        model = load_mdn_model()
+        model = Pydra.instantiate_mdn_model()
         model.fit(x, y, batch_size=200, epochs=epochs, verbose=1)
 
         Parameters
         ----------
-        cluster_size : int
-            Number of mixture clusters for each output
+
+        input_size : int
+            Dimension of input size
 
         output_size : int
             Number of outputs of model
 
+        cluster_size : int
+            Number of mixture clusters for each output
+
         layers : int
             Number of densely connected layers
-
-        input_size : int
-            Dimension of input size
 
         dense_layer_size : int
             Number of neurons in the densely connected layers
@@ -91,7 +59,7 @@ class Pydra:
             The learning rate for training (uses Adam).
 
         activation: str
-            Activation function for dense layer. Default is RELU.
+            Activation function for dense layer. Default is "relu".
 
         print_summary : bool
             Choose whether to print summary of constructed MDN
@@ -103,116 +71,56 @@ class Pydra:
             keras layer
 
         """
-        # if output_distributions undefined then all output layers are normal
+
+        # If output_distributions is undefined, then all output layers are assumed Normal
         if output_distributions is None:
-            output_distributions = ['Normal']*output_size
+            output_distributions = ["Normal"] * output_size
 
-        def normal_merged_layer(x,name=None):
-            """
-            Create merged mdn layer for a normal distribution
-            from densely connected layer.
-            """
-            m = Dense(cluster_size)(x)
+        # Dictionary for type of output layer depending on distribution
+        # ( beta can reuse gamma_merged_layer )
+        
 
-            v = Dense(cluster_size)(x)
-            v = Lambda(variance_transformation)(v)
+        pdfs = {
+            "Gamma": tf_gamma,
+            "Normal": tf_normal,
+            "Beta": tf_beta,
+            "Poisson": tf_poisson,
+            "Binomial": gen_tf_binomial(params["binomial_n"])
+        }
 
-            p = Dense(cluster_size)(x)
-            p = Lambda(proportion_transformation)(p)
+        # Define the input layer
+        inputs = Input(shape=(input_size, ))
 
-            return concatenate([m,v,p], axis=-1, name=name)
-
-        def gamma_merged_layer(x,name=None):
-            """
-            Create merged mdn layer for a gamma distribution
-            from densely connected layer.
-            """
-            alpha = Dense(cluster_size)(x)
-            alpha = Lambda(variance_transformation)(alpha)
-
-            beta = Dense(cluster_size)(x)
-            beta = Lambda(variance_transformation)(beta)
-
-            p = Dense(cluster_size)(x)
-            p = Lambda(proportion_transformation)(p)
-
-            return concatenate([alpha,beta,p], axis=-1, name=name)
-
-        def poisson_merged_layer(x,name=None):
-            """
-            Create merged mdn layer for a gamma distribution
-            from densely connected layer.
-            """
-            rate = Dense(cluster_size)(x)
-            rate = Lambda(variance_transformation)(rate)
-
-            ratep = Dense(cluster_size)(x)
-            ratep = Lambda(variance_transformation)(ratep)
-
-            p = Dense(cluster_size)(x)
-            p = Lambda(proportion_transformation)(p)
-
-            return concatenate([rate,ratep,p], axis=-1, name=name)
-
-        def binomial_merged_layer(x,name=None):
-            """
-            Create merged mdn layer for a binomial distribution
-            from densely connected layer.
-            """
-            # we use a round transformation here as ps are independent.
-            p = Dense(cluster_size)(x)
-            p = Lambda(round_transformation)(p)
-
-            p_ = Dense(cluster_size)(x)
-            p_ = Lambda(round_transformation)(p_)
-
-            pi = Dense(cluster_size)(x)
-            pi = Lambda(proportion_transformation)(pi)
-
-            return concatenate([p,p_,pi], axis=-1, name=name)
-
-        # create dictionary for type of output layer depending on distribution
-        #beta can re-use gamma_merged_layer
-        mlayers = {'Gamma':gamma_merged_layer,'Normal':normal_merged_layer,
-                   'Beta':gamma_merged_layer,'Poisson':poisson_merged_layer,
-                   'Binomial':binomial_merged_layer}
-        pdfs = {'Gamma':tf_gamma,'Normal':tf_normal,'Beta':tf_beta,
-                'Poisson':tf_poisson,'Binomial':gen_tf_binomial(params['binomial_n'])}
-
-        # define input layer
-        inputs = Input(shape=(input_size,))
-
-        # Stack densely-connected layers on top of input.
+        # Stack densely-connected layers on top of the input
         x = Dense(dense_layer_size, activation=activation)(inputs)
-        for _ in range(1,layers):
+        for _ in range(1, layers):
             x = Dense(dense_layer_size, activation=activation)(x)
-        # create multiple mdn merge layers to generate output of model.
-        outputs = [mlayers[dist](x,name='output_{}'.format(i)) \
-                  for i,dist in enumerate(output_distributions)]
 
-        # Instantiate Keras model.
+        # Create multiple MDN merge layers to generate the output of model
+        outputs = [mdn_layers[dist](x, cluster_size, name="output_{}".format(i)) for i, dist in enumerate(output_distributions)]
+
+        # Instantiate Keras model
         model = Model(inputs=[inputs], outputs=outputs)
-        if print_summary: print(model.summary())
-
         opt = Adam(lr=learning_rate)
+        if print_summary:
+            print(model.summary())
 
+        # Construct losses
+        loss = {
+            "output_{}".format(i): mdn_loss(num_components=cluster_size, pdf=pdfs[dist])
+            for i, dist in enumerate(output_distributions)
+        }
 
-        loss_list = [mdn_loss(num_components=cluster_size,pdf=pdfs[dist]) \
-                    for dist in output_distributions]
-
-        loss = {'output_{}'.format(i) : loss for i,loss in enumerate(loss_list)}
-
-        model.compile(loss=loss,optimizer=opt)
-
+        # Compile the model and return it
+        model.compile(loss=loss, optimizer=opt)
         return model
 
+    def __init__(
+        self, cluster_size=10, output_size=1, layers=3, input_size=1,
+        dense_layer_size=64, print_summary=True, output_distributions="Normal",
+        learning_rate=0.001, params={"binomial_n": 1000.}, activation="relu"
+    ):
 
-
-    def __init__(self,cluster_size=10,output_size=1,layers = 3,input_size=1,
-                 dense_layer_size=64,print_summary=True,
-                 output_distributions='Normal',learning_rate=0.001,
-                 params = {'binomial_n':1000.},
-                 activation='relu'):
         """
         Initialize Pydra class.
 
@@ -239,53 +147,50 @@ class Pydra:
             activation: str
                 Activation function for dense layer. Default is RELU.
         """
+
+        # If the output is a string for distribution type, listify and "broadcast"
         if isinstance(output_distributions, str):
-            # if output just a string then turn into array of lenth output_size
-            ec.check_distribution(output_distributions)
-            output_distributions = [output_distributions]*output_size
+            error_check.check_distribution(output_distributions)
+            output_distributions = [output_distributions] * output_size
 
-        ec.check_output_distributions_equals_output_size(output_size,output_distributions)
-        ec.check_output_distributions(output_distributions)
-        # TODO error check params and binomial_n and convert binomial_n to float
-        ec.check_binomial_n_defined_if_binomial(params,output_distributions)
+        # Validate other aspects of distributions
+        error_check.check_output_distributions_equals_output_size(output_size, output_distributions)
+        error_check.check_output_distributions(output_distributions)
+        error_check.check_binomial_n_defined_if_binomial(params, output_distributions)
 
+        # Set model attributes
         self.params = params
-        self.outputs = output_distributions
+        self.output_distributions = output_distributions
+        self.model = Pydra.instantiate_mdn_model(
+            cluster_size=cluster_size,
+            output_size=output_size,
+            layers=layers,
+            input_size=input_size,
+            params=params,
+            dense_layer_size=dense_layer_size,
+            print_summary=print_summary,
+            output_distributions=output_distributions,
+            learning_rate=learning_rate,
+            activation=activation
+        )
 
-        self.model = Pydra.load_mdn_model(cluster_size=cluster_size,
-        output_size=output_size,layers = layers,input_size=input_size,
-        params=params,dense_layer_size=dense_layer_size,
-        print_summary=print_summary,output_distributions=output_distributions,
-        learning_rate=learning_rate,activation=activation)
-
-        self.predicted_output = None
-
-    def fit(self,*args,**kwargs):
+    def fit(self, *args, **kwargs):
         """
-        This is a hack.
-        TODO: What we really want is inheritence from the keras model class
-        so we get
-        all these functions automatically.
-        """
-        ec.check_training_output_values(args[1],self.outputs,self.params)
-
-
-        return self.model.fit(*args,**kwargs)
-
-    def predict(self,*args,**kwargs):
-        """
-        This is a hack.
-        TODO: What we really want is inheritence from the keras model class
-        so we get
-        all these functions automatically.
+        Fit the underlying Keras model.
         """
 
-        output = self.model.predict(*args,**kwargs)
-        self.predicted_output = output
+        error_check.check_training_output_values(args[1], self.output_distributions, self.params)
 
-        return output
+        return self.model.fit(*args, **kwargs)
 
-    def generate_mdn_sample_from_ouput(self,inputs):
+    def predict(self, *args, **kwargs):
+        """
+        Predict from the MDN model.
+        """
+
+        return self.model.predict(*args, **kwargs)
+
+    def sample(self, inputs):
         """
         Produce samples from fitted model for a given set of inputs.
 
@@ -300,24 +205,72 @@ class Pydra:
             sample predictions.
         """
 
-        output = self.predict(inputs)
-        if isinstance(output, list):
-            prediction_samples = []
-            for i,dist in zip(range(len(output)),distribution):
-                samples = generate_mdn_sample_from_ouput(output[i],
-                                                         inputs.size,
-                                                         distribution=dist,
-                                                         params=self.params)
-                prediction_samples.append(samples)
-        else:
-            prediction_samples = generate_mdn_sample_from_ouput(output,
-                                                         inputs.size,
-                                                         distribution=self.outputs[0],
-                                                         params=self.params)
+        # Generate predictions from the input
+        predictions = self.predict(inputs)
 
-        return prediction_samples
+        # Generate predictions for all outputs separately
+        prediction_samples = []
+        for i, (dist, out) in enumerate(zip(self.output_distributions, predictions)):
 
-    def predict_plot(self,inputs,plot='mean',axis=None):
+            # Validate that the distribution seems to be behaving
+            error_check.check_distribution(distribution)
+
+            # Grab the means, sigmas, and mixture weights
+            out_pi, out_sigma, out_mu = get_mixture_coef(out, self.cluster_size)
+
+            # Initiate an array to hold results
+            result = np.zeros(len(out))
+
+            mu = 0
+            std = 0
+            idx = 0
+
+            # For each component in the mixture
+            for i in range(len(result)):
+
+                # Grab one mixture at random, weighted by its mixture weight
+                idx = np.random.choice(num_components, 1, p=out_pi[i])
+
+                # Generate random numbers per the distribution type for this component
+                if distribution == "Normal":
+                    mu = out_mu[i, idx]
+                    std = np.sqrt(out_sigma[i, idx])
+                    result[i] = mu + std * np.random.randn()
+
+                elif distribution == "Gamma":
+                    alpha = out_mu[i, idx]
+                    beta = out_sigma[i, idx]
+                    result[i] = np.random.gamma(alpha, 1 / beta)
+
+                elif distribution == "Beta":
+                    alpha = out_mu[i, idx]
+                    beta = out_sigma[i, idx]
+                    result[i] = np.random.beta(alpha, beta)
+
+                elif distribution == "Poisson":
+                    rate = out_mu[i, idx]
+                    result[i] = np.random.poisson(rate)
+
+                elif distribution == "Binomial":
+                    p = out_mu[i, idx]
+                    result[i] = np.random.binomial(params['binomial_n'], p)
+
+                else:
+                    raise ValueError("{} not a valid distribution.".format(distribution))
+
+            return result
+
+
+
+
+
+
+            samples = sample(out, inputs.size, distribution=dist, params=self.params)
+            prediction_samples.append(samples)
+
+        return np.array(prediction_samples).T
+
+    def predict_plot(self, inputs, plot="mean", axis=None):
             """
             Predict for a set of inputs and then plot.
 
@@ -353,27 +306,26 @@ class Pydra:
 
             """
 
-            # if input is multi-dimensional
-            if (inputs.ndim==2) and (inputs[1].size>1):
-                axis = 0 if axis is None else axis
-                x_test = inputs[:,axis]
+            # If input is multidimensional, grab the right axis
+            if (inputs.ndim == 2) and (inputs[1].size > 1):
+                if axis is None:
+                    axis = 0
+                x_test = inputs[:, axis]
             else:
                 x_test = inputs
 
+            # Generate predictions from inputs
             output = self.predict(inputs)
 
-            if plot=='mean':
-                plot_utils.plot_mean_and_var(output,x_test,
-                                            distribution=self.outputs,
-                                            params=self.params)
-            elif plot=='sample':
-                raise NameError('Not yet implemented. Use plot=\'mean\' instead.')
+            if plot == "mean":
+                plot_utils.plot_mean_and_var(
+                    output, x_test, distribution=self.output_distributions, params=self.params
+                )
+
+            elif plot == "sample":
+                raise NotImplementedError("Not yet implemented. Use plot='mean' instead.")
             else:
-                raise NameError('plot either mean or sample.')
-
-
-
-
+                raise ValueError("plot should be either 'mean' or 'sample'.")
 
 
 def get_lossfunc(out_pi, out_sigma, out_mu, y, pdf=tf_normal):
@@ -399,21 +351,20 @@ def get_lossfunc(out_pi, out_sigma, out_mu, y, pdf=tf_normal):
     -------
         Negative log-likelihood : float
     """
-    #output (n,m)
-    result = pdf(y, out_mu, out_sigma)
-    #output (n,m)
-    result = result * out_pi
-    #output (n,)
+
+    # Calculate weighted probs
+    result = out_pi * pdf(y, out_mu, out_sigma)
+
+    # Sum
     result = K.sum(result, axis=1, keepdims=True)
-    #output (n,)
+
+    # Take negative log
     result = -K.log(result + 1e-8)
-    #output 1
-    result = K.mean(result)
+
+    return K.mean(result)
 
 
-    return result
-
-def mdn_loss(num_components=24, output_dim=1,pdf=tf_normal):
+def mdn_loss(num_components=24, output_dim=1, pdf=tf_normal):
     """
     Updated version of mdn loss to avoid having to create a custom keras layer.
     Returns loss function (not loss value) for given number of components
@@ -433,6 +384,7 @@ def mdn_loss(num_components=24, output_dim=1,pdf=tf_normal):
         loss : function
 
     """
+
     def loss(y, output):
         """
         Loss function.
@@ -450,6 +402,40 @@ def mdn_loss(num_components=24, output_dim=1,pdf=tf_normal):
             loss : function
 
         """
+
+        # Get mixture coefficients and shortcut arguments to the loss function
         out_pi, out_sigma, out_mu = get_mixture_coef(output, num_components)
         return get_lossfunc(out_pi, out_sigma, out_mu, y, pdf=pdf)
+
     return loss
+
+
+def get_mixture_coef(output, num_components=24):
+    """
+    Given the output predictions of the mixture density network, returns
+    the weights, variances, and means of each mixture cluster.
+
+    Parameters
+    ----------
+        output : array
+            layer of neural network ordered mixture weights (unscaled), variance
+            (unscaled) and means
+        num_components : int
+            number of mixtures
+
+    Returns
+    ----------
+    out_pi : array
+        weights of mixtures.
+    out_sigma : array
+        variance of mixtures.
+    out_mu : array
+        means of mixtures.
+
+    """
+
+    out_mu = output[:, :num_components]
+    out_sigma = output[:, num_components:2*num_components]
+    out_pi = output[:, 2*num_components:]
+    return out_pi, out_sigma, out_mu
+

@@ -1,128 +1,117 @@
-"""
-Distributions
-------------------
-
-Implementation of Mixture Density Networks in Keras.
-
-Summary
--------
-Contains all methods associated with the output of the model including sampling
-from the model distribution and generating statistics
-
-"""
 import numpy as np
-import math
-from keras import backend as K
 import tensorflow as tf
-import tensorflow.contrib.distributions as dist
+from tensorflow_probability import distributions
+from keras import backend as K
+
 
 def gamma(x):
     return K.exp(tf.lgamma(x))
 
+
 def tf_normal(y, mu, sigma):
-    '''
-    pdf of normal density for _n_ data points and _m_ mixtures.
+    """
+    pdf of normal density for n data points and m mixtures.
 
     Parameters
     ----------
     y : array (n,)
         data
-    mu : array (,m)
+    mu : array (, m)
         mean
-    sigma : array (,m)
+    sigma : array (, m)
         variance
+
     Returns
     -------
 
     pdf : array (n,m)
         probability for each data point and mixture
-    '''
-    oneDivSqrtTwoPI = 1 / math.sqrt(2*math.pi)
-    result = y - mu #broadcasting converts this to two-dimensional array.
-    #result = K.permute_dimensions(result, [2,1,0])
-    result = result * (1 / (sigma + 1e-8))
-    result = -K.square(result)/2
-    result = K.exp(result) * (1/(sigma + 1e-8))*oneDivSqrtTwoPI
+    """
 
-    #result = K.prod(result, axis=[0]) #should be (,m) array
+    one_over_root_pi = 1 / tf.sqrt(2 * np.pi)
+    result = (y - mu) * (1 / (sigma + 1e-8))
+    result = -K.square(result) / 2
+    result = K.exp(result) * (1 / (sigma + 1e-8)) * one_over_root_pi
 
     return result
 
-def tf_gamma(y,alpha,beta):
-    '''
-    pdf of gamma density for _n_ data points and _m_ mixtures.
+
+def tf_gamma(y, alpha, beta):
+    """
+    pdf of gamma density for n data points and m mixtures.
 
     Parameters
     ----------
-    y : array (n,)
+    y : array (n, )
         data
-    alpha : array (,m)
+    alpha : array (, m)
         gamma shape parameter
-    beta : array (,m)
+    beta : array (, m)
         gamma shape parameter
+
     Returns
     -------
 
-    pdf : array (n,m)
+    pdf : array (n, m)
         probability for each data point and mixture
-    '''
-    #Z = gamma(alpha) * K.pow(beta,alpha)
-    #return K.pow(y,(alpha - 1)) * K.exp(-y * beta) / Z
-    return dist.Gamma(concentration=alpha, rate=beta).prob(y)
+    """
 
-def tf_beta(y,alpha,beta):
-    '''
+    return distributions.Gamma(concentration=alpha, rate=beta).prob(y)
+
+
+def tf_beta(y, alpha, beta):
+    """
     pdf of beta distribution for _n_ data points and _m_ mixtures
 
     Parameters
     ----------
-    y : array (n,)
+    y : array (n, )
         data
-    alpha : array (,m)
+    alpha : array (, m)
         beta shape parameter
-    beta : array (,m)
+    beta : array (, m)
         beta shape parameter
     Returns
     -------
 
-    pdf : array (n,m)
+    pdf : array (n, m)
         probability for each data point and mixture
 
-    '''
-    #Z = gamma(alpha) * gamma(beta) / gamma(alpha + beta)
-    #return y**(alpha - 1) * (1 - y)**(beta - 1) / Z
-    return dist.Beta(alpha,beta).prob(y)
+    """
 
-def tf_poisson(y,lbda,_):
-    '''
+    return distributions.Beta(alpha, beta).prob(y)
+
+
+def tf_poisson(y, lbda, _):
+    """
     pmf of poisson density for _n_ data points and _m_ mixtures.
 
     Parameters
     ----------
 
-    y : array (n,)
+    y : array (n, )
         data
-    lbda : array (,m)
+    lbda : array (, m)
         Poisson rate parameter
 
     Returns
     -------
 
-    pdf : array (n,m)
+    pdf : array (n, m)
         probability for each data point and mixture
 
     Notes
     -----
 
-    As other distributions take in three parameters we include a redundant third
-    parameter. This would need refactoring.
-    '''
-    #Z = gamma(alpha) * gamma(beta) / gamma(alpha + beta)
-    #return y**(alpha - 1) * (1 - y)**(beta - 1) / Z
-    return dist.Poisson(lbda).prob(y)
+    As other distributions take in three parameters, we include a
+    redundant third parameter. This would need refactoring.
+    """
 
-def tf_binomial(y,n,p):
-    '''
+    return distributions.Poisson(lbda).prob(y)
+
+
+def tf_binomial(y, n, p):
+    """
     pdf of binomial distribution for _n_ data points and _m_ mixtures
 
     Parameters
@@ -139,13 +128,13 @@ def tf_binomial(y,n,p):
     pdf : array (n,m)
         probability for each data point and mixture
 
-    '''
-    #Z = gamma(alpha) * gamma(beta) / gamma(alpha + beta)
-    #return y**(alpha - 1) * (1 - y)**(beta - 1) / Z
-    return dist.Binomial(n,p).prob(y)
+    """
+
+    return distributions.Binomial(n, p).prob(y)
+
 
 def gen_tf_binomial(n):
-    '''
+    """
     generates function for
     pdf of binomial distribution for _n_ data points and _m_ mixtures
 
@@ -158,9 +147,8 @@ def gen_tf_binomial(n):
 
     f : function
         Similar form to tf_ functions
+    """
 
-    '''
-    # TODO Fix hack
-    def f(y,p,_):
-        return dist.Binomial(total_count=n,probs=p).prob(y)
+    def f(y, p, _):
+        return distributions.Binomial(total_count=n, probs=p).prob(y)
     return f

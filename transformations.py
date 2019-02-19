@@ -1,23 +1,9 @@
-"""
-Transformations
----------------
-
-Transformations for MDN
-
-Summary
--------
-Contains all methods associated with the transformation of keras layers
-for use in the top MDN layer of the network.
-
-"""
-import numpy as np
-import math
 from keras import backend as K
-from keras.layers import Input, Dense, Lambda, concatenate
+
 
 def variance_transformation(v):
     """
-    Transform a layer by exponentiation to convert to the interval $(0,\infty)$.
+    Transform a layer by exponentiation to convert to the interval $(0, \\infty)$.
 
     Example
     -------
@@ -35,9 +21,8 @@ def variance_transformation(v):
         keras layer
 
     """
-    out_v = v
-    out_v = K.exp(out_v)
-    return out_v
+
+    return K.exp(v)
 
 
 def proportion_transformation(p):
@@ -60,13 +45,11 @@ def proportion_transformation(p):
         keras layer
 
     """
-    out_p = p
-    max_p = K.max(out_p, axis=1, keepdims=True)
-    out_p = out_p - max_p
-    out_p = K.exp(out_p)
+
+    out_p = K.exp(p - K.max(p, axis=1, keepdims=True))
     normalize_p = 1 / K.sum(out_p, axis=1, keepdims=True)
-    out_p = normalize_p * out_p
-    return out_p
+    return normalize_p * out_p
+
 
 def round_transformation(r):
     """
@@ -87,6 +70,7 @@ def round_transformation(r):
     -------
         keras layer
 
+
     """
-    out_r = .5 + .5*K.tanh(r)
-    return out_r
+
+    return 0.5 + 0.5 * K.tanh(r)

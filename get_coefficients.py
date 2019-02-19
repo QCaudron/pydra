@@ -1,19 +1,3 @@
-"""
-get_coefficients
-----------------
-
-Get coefficient from model
-
-Summary
--------
-Contains all methods associated with getting coefficients from the model
-
-"""
-import numpy as np
-import math
-from keras import backend as K
-from keras.layers import Input, Dense, Lambda, concatenate
-
 def get_mixture_coef(output, num_components=24):
     """
     Gets output (layer of NN) and converts into proportion, variance and mean
@@ -38,7 +22,8 @@ def get_mixture_coef(output, num_components=24):
         mean of mixtures.
 
     """
-    out_mu = output[:,:num_components]
-    out_sigma = output[:,num_components:2*num_components]
-    out_pi = output[:,2*num_components:]
+
+    out_mu = output[:, :num_components]
+    out_sigma = output[:, num_components:2*num_components]
+    out_pi = output[:, 2*num_components:]
     return out_pi, out_sigma, out_mu
